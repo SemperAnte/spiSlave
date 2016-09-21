@@ -2,6 +2,7 @@
 !*/
 !.gitignore
 !*.tcl
+!README.md
 
 cpp
 !cpp/

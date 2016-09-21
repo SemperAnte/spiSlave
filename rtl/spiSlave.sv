@@ -1,86 +1,65 @@
 //--------------------------------------------------------------------------------
-// File Name:     spiSlave.sv
+// File Name:     spiCore.sv
 // Project:       spiSlave
 // Author:        Shustov Aleksey ( SemperAnte ), semte@semte.ru
 // History:
-//       19.09.2016 - 0.1, created
+//       21.09.2016 - 0.1, created
 //--------------------------------------------------------------------------------
-// SPI slave
+// SPI slave interface
 //--------------------------------------------------------------------------------
 module spiSlave
-  #( parameter logic CPOL     = 1'b1,  // spi clock polarity mode
-               logic CPHA     = 1'b1,  // spi clock phase mode
-               int   DATA_WDT = 8 )    // data width in bits                    
-   ( input  logic                      clk,
-     input  logic                      reset,    // async reset
-               
-     input  logic                      ssel,     // active low slave select signal
-     input  logic                      sclk,     // spi clock
-     input  logic                      mosi,     // master out, slave in data line
-     output logic                      miso,     // master in, slave out data line
+  #( parameter logic CPOL     = 1'b0,              // spi clock polarity mode
+               logic CPHA     = 1'b0,              // spi clock phase mode
+               int   DATA_WDT = 8 )                // data width in bits                    
+   ( input  logic                       clk,
+     input  logic                       reset,     // async reset
      
-     input  logic [ DATA_WDT - 1 : 0 ] txData,   //
-     output logic                      txLoad,   //
-     output logic [ DATA_WDT - 1 : 0 ] rxData,   //  
-     output logic                      rxRdy );  //     
+     // spi line
+     input  logic                       ssel,      // active low slave select signal
+     input  logic                       sclk,      // spi clock
+     input  logic                       mosi,      // master out, slave in data line
+     output logic                       miso,      // master in,  slave out data line
+     
+     // part sync with clk
+     output logic                       spiBusy,   // high when spi is busy ( ssel low )
+     output logic                       spiStart,  // tick when transfer start
+     output logic                       spiEnd,    // tick when transfer end
+     output logic                       spiTxLoad, // tick when txData is loaded, insert next data here
+     output logic                       spiRxRdy,  // tick when rxData is rdy
+     
+     input  logic  [ DATA_WDT - 1 : 0 ] spiTxData,
+     output logic  [ DATA_WDT - 1 : 0 ] spiRxData  );
 
-   // active reset depending on reset and ssel
-   logic actRes;
-   assign actRes = reset | ~ssel;
-     
-   logic [ 7 : 0 ] txWord;
-   logic [ 2 : 0 ] txCnt;
+   logic asyncTxLoad;
+   logic asyncRxRdy;
    
-   logic sclkNorm;
-   assign sclkNorm = ( CPOL ) ? ~sclk : sclk;
-   logic clkMiso;
-   assign clkMiso = ( CPHA ) ? sclkNorm : ~sclkNorm;
-   
-   // miso service   
-   always @( posedge actRes, posedge clkMiso )
-      if ( actRes ) begin
-         txLoad <= 1'b0;
-         txCnt    <= '0;
-         txLoad <= 1'b0;
-      end else begin
-         if ( ~|txCnt ) begin
-            txWord   <= txData;
-            txLoad <= 1'b1;
-         end else begin
-            txWord <= { txWord[ DATA_WDT - 2 : 0 ], 1'b0 };
-            if ( txCnt == DATA_WDT / 2 )
-               txLoad <= 1'b0;
-            if ( txCnt == DATA_WDT - 1 )
-               txCnt <= '0;
-         end            
-      end
-   assign miso = ( actRes ) ? 1'bz : txWord[ DATA_WDT - 1 ];
-   
-   logic clkMosi;
-   assign clkMosi = ( CPHA ) ? ~sclkNorm : sclkNorm;
-   
-   logic [ 7 : 0 ] rxWord;
-   logic [ 2 : 0 ] rxCnt;
-   
-   // mosi service
-   always @( posedge actRes, posedge clkMosi )
-      if ( actRes ) begin
-         rxRdy <= 1'b1;
-         rxCnt <= '0;
-      end else begin
-         if ( ~|rxCnt ) begin
-            rxRdy <= 1'b1;
-         end else begin
-            if ( rxCnt == DATA_WDT / 2 )
-               rxRdy <= 1'b0;
-            if ( rxCnt == DATA_WDT - 1 ) begin
-               rxRdy  <= 1'b1;
-               rxCnt  <= '0;
-               rxData <= rxWord; // !!!
-            end
-         end
-         rxRdy  <= 1'b0;
-         rxWord <= { rxWord[ DATA_WDT - 2 : 0 ], mosi };
-      end
+   // spi line control
+   spiCore 
+      #( .CPOL     ( CPOL     ),   
+         .CPHA     ( CPHA     ),
+         .DATA_WDT ( DATA_WDT ) )      
+   spiCoreInst
+       ( .reset   ( reset       ),          
+         .ssel    ( ssel        ),
+         .sclk    ( sclk        ),
+         .mosi    ( mosi        ),
+         .miso    ( miso        ),     
+         .txLoad  ( asyncTxLoad ),
+         .txData  ( spiTxData   ),
+         .rxRdy   ( asyncRxRdy  ),
+         .rxData  ( spiRxData   ) );
+         
+   // spi synchronizer to internal clock
+   spiSync spiSyncInst
+      ( .clk         ( clk         ), 
+        .reset       ( reset       ),       
+        .ssel        ( ssel        ),
+        .asyncTxLoad ( asyncTxLoad ),
+        .asyncRxRdy  ( asyncRxRdy  ),
+        .spiBusy     ( spiBusy     ),
+        .spiStart    ( spiStart    ),
+        .spiEnd      ( spiEnd      ),
+        .spiTxLoad   ( spiTxLoad   ),
+        .spiRxRdy    ( spiRxRdy    ) );   
    
 endmodule
