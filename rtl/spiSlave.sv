@@ -4,8 +4,15 @@
 // Author:        Shustov Aleksey ( SemperAnte ), semte@semte.ru
 // History:
 //       21.09.2016 - 0.1, created
+//       22.09.2016 - 0.2, base functionality, verified with external arm processor
+//       23.09.2016 - 0.3, minor changes in spi core
 //--------------------------------------------------------------------------------
 // SPI slave interface
+//    - spi core sync with spi sclk  
+//    - synchronizer to internal clk
+//
+// for timing diagram and spi description : 
+// https://en.wikipedia.org/wiki/Serial_Peripheral_Interface_Bus
 //--------------------------------------------------------------------------------
 module spiSlave
   #( parameter logic CPOL     = 1'b0,              // spi clock polarity mode
@@ -30,36 +37,42 @@ module spiSlave
      input  logic  [ DATA_WDT - 1 : 0 ] spiTxData,
      output logic  [ DATA_WDT - 1 : 0 ] spiRxData  );
 
-   logic asyncTxLoad;
+   logic asyncTxLoadFirst;
+   logic asyncTxLoadNext;
    logic asyncRxRdy;
    
    // spi line control
    spiCore 
-      #( .CPOL     ( CPOL     ),   
-         .CPHA     ( CPHA     ),
-         .DATA_WDT ( DATA_WDT ) )      
+      #( .CPOL        ( CPOL     ),   
+         .CPHA        ( CPHA     ),
+         .DATA_WDT    ( DATA_WDT ) )      
    spiCoreInst
-       ( .reset   ( reset       ),          
-         .ssel    ( ssel        ),
-         .sclk    ( sclk        ),
-         .mosi    ( mosi        ),
-         .miso    ( miso        ),     
-         .txLoad  ( asyncTxLoad ),
-         .txData  ( spiTxData   ),
-         .rxRdy   ( asyncRxRdy  ),
-         .rxData  ( spiRxData   ) );
-         
+       ( .reset       ( reset            ),          
+         .ssel        ( ssel             ),
+         .sclk        ( sclk             ),
+         .mosi        ( mosi             ),
+         .miso        ( miso             ),     
+         .txLoadFirst ( asyncTxLoadFirst ),
+         .txLoadNext  ( asyncTxLoadNext  ),
+         .txData      ( spiTxData        ),
+         .rxRdy       ( asyncRxRdy       ),
+         .rxData      ( spiRxData        ) );
+   
+   localparam int SYNC_DEPTH = 3; // number of registers in sync chain ( >= 2 )
    // spi synchronizer to internal clock
-   spiSync spiSyncInst
-      ( .clk         ( clk         ), 
-        .reset       ( reset       ),       
-        .ssel        ( ssel        ),
-        .asyncTxLoad ( asyncTxLoad ),
-        .asyncRxRdy  ( asyncRxRdy  ),
-        .spiBusy     ( spiBusy     ),
-        .spiStart    ( spiStart    ),
-        .spiEnd      ( spiEnd      ),
-        .spiTxLoad   ( spiTxLoad   ),
-        .spiRxRdy    ( spiRxRdy    ) );   
+   spiSync
+     #( .SYNC_DEPTH       ( SYNC_DEPTH       ) )
+   spiSyncInst
+      ( .clk              ( clk              ), 
+        .reset            ( reset            ),       
+        .ssel             ( ssel             ),
+        .asyncTxLoadFirst ( asyncTxLoadFirst ),
+        .asyncTxLoadNext  ( asyncTxLoadNext  ),
+        .asyncRxRdy       ( asyncRxRdy       ),
+        .spiBusy          ( spiBusy          ),
+        .spiStart         ( spiStart         ),
+        .spiEnd           ( spiEnd           ),
+        .spiTxLoad        ( spiTxLoad        ),
+        .spiRxRdy         ( spiRxRdy         ) );   
    
 endmodule

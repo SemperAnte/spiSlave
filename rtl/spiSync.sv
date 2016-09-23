@@ -8,49 +8,62 @@
 // SPI synchronizer
 // synchronize data from external spi clock to internal clock
 //--------------------------------------------------------------------------------
-module spiSync                
+module spiSync
+  #( parameter int SYNC_DEPTH )        // number of registers in sync chain ( >= 2 )
    ( input  logic  clk,
-     input  logic  reset,        // async reset
+     input  logic  reset,              // async reset
      
      // part sync with sclk
-     input  logic  ssel,         // active low slave select signal
-     input  logic  asyncTxLoad,  // transition low-high when txData is loaded to internal register
-     input  logic  asyncRxRdy,   // transition high-low when rxData is ready 
+     input  logic  ssel,               // active low slave select signal     
+     input  logic  asyncTxLoadFirst,   // first word is loaded
+     input  logic  asyncTxLoadNext,    // next words are loaded
+     input  logic  asyncRxRdy,         // transition high-low when rxData is ready 
      
      // part sync with clk
-     output logic  spiBusy,      // high when spi is busy ( ssel low )
-     output logic  spiStart,     // tick when transfer start
-     output logic  spiEnd,       // tick when transfer end
-     output logic  spiTxLoad,    // tick when txData is loaded, insert next data here
-     output logic  spiRxRdy );   // tick when rxData is rdy
+     output logic  spiBusy,            // high when spi is busy ( ssel low )
+     output logic  spiStart,           // tick when transfer start
+     output logic  spiEnd,             // tick when transfer end
+     output logic  spiTxLoad,          // tick when txData is loaded, insert next data here
+     output logic  spiRxRdy );         // tick when rxData is rdy
+     
+   // check parameters
+   initial begin
+      if ( SYNC_DEPTH < 2 ) begin
+         $error( "Not correct parameter, SYNC_DEPTH" );
+         $stop;
+      end
+   end
 
-   logic [ 3 : 0 ] syncBusy;
+   logic [ SYNC_DEPTH : 0 ] syncBusy; // SYNC_DEPTH + 1 for edge detection
    always_ff @( posedge reset, posedge clk )
       if ( reset ) begin
          syncBusy <= '0;         
       end else begin
-         syncBusy <= { syncBusy[ 2 : 0 ], ~ssel };
+         syncBusy <= { syncBusy[ SYNC_DEPTH - 1 : 0 ], ~ssel };
       end         
-   assign spiStart = ~syncBusy[ 3 ] &&  syncBusy[ 2 ];
-   assign spiEnd   =  syncBusy[ 3 ] && ~syncBusy[ 2 ];
-   assign spiBusy  =  syncBusy[ 2 ] | spiEnd;
+   assign spiEnd   =  syncBusy[ SYNC_DEPTH ] & ~syncBusy[ SYNC_DEPTH - 1 ]; // falling edge ssel
+   assign spiBusy  =  spiStart | syncBusy[ SYNC_DEPTH - 1 ] | spiEnd;
    
-   logic [ 3 : 0 ] syncTxLoad;
+   logic [ SYNC_DEPTH : 0 ] syncTxLoadFirst;
+   logic [ SYNC_DEPTH : 0 ] syncTxLoadNext;
    always_ff @( posedge reset, posedge clk )
       if ( reset ) begin
-         syncTxLoad <= '0;
+         syncTxLoadFirst <= '0;
+         syncTxLoadNext  <= '0;
       end else begin
-         syncTxLoad <= { syncTxLoad[ 2 : 0 ], asyncTxLoad };
+         syncTxLoadFirst <= { syncTxLoadFirst[ SYNC_DEPTH - 1 : 0 ], asyncTxLoadFirst };
+         syncTxLoadNext  <= { syncTxLoadNext [ SYNC_DEPTH - 1 : 0 ], asyncTxLoadNext  };
       end         
-   assign spiTxLoad = ~syncTxLoad[ 3 ] && syncTxLoad[ 2 ];
+   assign spiStart  = ~syncTxLoadFirst[ SYNC_DEPTH ] & syncTxLoadFirst[ SYNC_DEPTH - 1 ]; // rising edge
+   assign spiTxLoad = spiStart | ( ~syncTxLoadNext[ SYNC_DEPTH ] & syncTxLoadNext[ SYNC_DEPTH - 1 ] );
    
-   logic [ 3 : 0 ] syncRxRdy;
+   logic [ SYNC_DEPTH : 0 ] syncRxRdy;
    always_ff @( posedge reset, posedge clk )
       if ( reset ) begin
          syncRxRdy <= '0;
       end else begin
-         syncRxRdy <= { syncRxRdy[ 2 : 0 ], asyncRxRdy };
+         syncRxRdy <= { syncRxRdy[ SYNC_DEPTH - 1 : 0 ], asyncRxRdy };
       end
-   assign spiRxRdy = syncRxRdy[ 3 ] && ~syncRxRdy[ 2 ];
+   assign spiRxRdy = syncRxRdy[ SYNC_DEPTH ] & ~syncRxRdy[ SYNC_DEPTH - 1 ];
    
 endmodule

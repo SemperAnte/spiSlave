@@ -4,6 +4,7 @@
 // Author:        Shustov Aleksey ( SemperAnte ), semte@semte.ru
 // History:
 //       19.09.2016 - 0.1, created
+//       23.09.2016 - 0.2, auto-checking
 //--------------------------------------------------------------------------------
 // SPI slave testbench
 //--------------------------------------------------------------------------------
@@ -13,8 +14,8 @@ module tb_spiSlave ();
 
    localparam int T_CLK  = 10;
    
-   localparam logic CPOL     = 1'b0; // spi clock polarity mode
-   localparam logic CPHA     = 1'b0; // spi clock phase mode
+   localparam logic CPOL     = 1'b1; // spi clock polarity mode
+   localparam logic CPHA     = 1'b1; // spi clock phase mode
    localparam int   DATA_WDT = 8;    // data width in bits     
 
    logic                      clk;
@@ -28,7 +29,7 @@ module tb_spiSlave ();
    logic                      spiEnd;  
    logic                      spiTxLoad;
    logic                      spiRxRdy;     
-   logic [ DATA_WDT - 1 : 0 ] spiTxData;           
+   logic [ DATA_WDT - 1 : 0 ] spiTxData = $urandom();           
    logic [ DATA_WDT - 1 : 0 ] spiRxData;                     
 
    spiSlave
@@ -63,11 +64,14 @@ module tb_spiSlave ();
       reset = 1'b0;
    end
    
-   logic [ DATA_WDT - 1 : 0 ] wrData;
-   logic [ DATA_WDT - 1 : 0 ] rdData;  
-   // write and read through spi random data
+   logic [ DATA_WDT - 1 : 0 ] masterTxData, masterTxDataPrev;
+   logic [ DATA_WDT - 1 : 0 ] masterRxData;
+   logic                      masterRxRdy = 1'b0;
+   // write and read through spi random data ( spi master emulation )
    task spiMasterRandom ( realtime T_SCLK   = 20,
                           int      BYTE_NUM = 2 );                        
+      logic [ DATA_WDT - 1 : 0 ] txData;
+      logic [ DATA_WDT - 1 : 0 ] rxData; 
       
       if ( CPHA ) begin // CPHA = 1'b1
          ssel = 1'b0;
@@ -75,16 +79,20 @@ module tb_spiSlave ();
          mosi = 1'bx;
          
          for ( int spiWord = 0; spiWord < BYTE_NUM; spiWord++ ) begin
-            wrData = $urandom();
-            $display( "wrData = %8b", wrData );
+            txData = $urandom();            
+            masterTxData = txData;
             for ( int spiBit = 0; spiBit < DATA_WDT; spiBit++ ) begin
                # ( T_SCLK / 2 ); 
                sclk = ~sclk;
-               mosi = wrData[ DATA_WDT - 1 - spiBit ];
+               mosi = txData[ DATA_WDT - 1 - spiBit ];
                # ( T_SCLK / 2 );
                sclk = ~sclk;
-               rdData[ DATA_WDT - 1 - spiBit ] = miso;
+               rxData[ DATA_WDT - 1 - spiBit ] = miso;
             end
+            masterRxData = rxData;
+            masterRxRdy  = 1'b1;
+            masterRxRdy <= #T_CLK 1'b0;
+            masterTxDataPrev = masterTxData;
          end         
          
          # ( T_SCLK / 2 );
@@ -96,16 +104,20 @@ module tb_spiSlave ();
          sclk   = CPOL;
          
          for ( int spiWord = 0; spiWord < BYTE_NUM; spiWord++ ) begin
-            wrData = $urandom();
-            $display( "wrData = %8b", wrData );
+            txData = $urandom();            
+            masterTxData = txData;
             for ( int spiBit = 0; spiBit < DATA_WDT; spiBit++ ) begin
-               mosi = wrData[ DATA_WDT - 1 - spiBit ];
+               mosi = txData[ DATA_WDT - 1 - spiBit ];
                # ( T_SCLK / 2 );
                sclk = ~sclk;
-               rdData[ DATA_WDT - 1 - spiBit ] = miso;
+               rxData[ DATA_WDT - 1 - spiBit ] = miso;
                # ( T_SCLK / 2 );
                sclk = ~sclk;
             end
+            masterRxData = rxData;
+            masterRxRdy  = 1'b1;
+            masterRxRdy <= #T_CLK 1'b0;
+            masterTxDataPrev = masterTxData;
          end
          
          mosi = 1'bx;
@@ -119,13 +131,34 @@ module tb_spiSlave ();
    initial begin
       logic [ DATA_WDT - 1 : 0 ] data;
       
-      spiTxData = 8'b01011011;   
-      
       @ ( negedge reset );
       # ( 10 * T_CLK );
       
-      spiMasterRandom( 9 );
+      repeat ( 5 ) begin
+         spiMasterRandom( $urandom_range( 20, 5 ), $urandom_range( 5, 1 ) );      
+         # ( $urandom_range( 10, 2 ) * T_CLK );
+      end
       
    end
+   
+   logic [ DATA_WDT - 1 : 0 ] spiTxDataPrev;
+   always_ff @( negedge spiTxLoad )
+   begin
+      spiTxData     <= $urandom();
+      spiTxDataPrev <= spiTxData;
+   end
+   
+   always_ff @( posedge masterRxRdy )
+      if ( spiTxDataPrev != masterRxData )
+         $warning( "slave tx / master rx  data : not equal : %b / %b", spiTxDataPrev, masterRxData );
+      else
+         $display( "slave tx / master rx  data : correct" );
+         
+   always_ff @( posedge spiRxRdy )
+      if ( spiRxData != masterTxDataPrev )
+         $warning( "slave rx / master tx  data : not equal : %b / %b", spiRxData, masterTxDataPrev );
+      else
+         $display( "slave rx / master tx  data : correct" );
+   
    
 endmodule
