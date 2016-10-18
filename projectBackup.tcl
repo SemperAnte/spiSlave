@@ -6,11 +6,11 @@
 set dirCloud [list "C:/Users/SemperAnte/Dropbox/projects"\
                    "C:/Users/SA/Dropbox/projects"]
 # directories for cleaning
-set dirSearch [list "sim" "quartus"]
+set dirSearch [list "sim" "quartus/spiSlave" "quartus/spiCheckDE1SoC"]
 # exclude extensions
 set excExt [list "sv" "v" "vh" "vhd"\
                  "do" "tcl"\
-                 "qpf" "qsf" "sdc" "qsys" "sopcinfo"]
+                 "qpf" "qsf" "sdc" "qsys" "sopcinfo" "stp"]
 
 # choose path for cloud that existing                 
 foreach dir $dirCloud {

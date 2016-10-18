@@ -16,7 +16,7 @@ module spiSync
      // part sync with sclk
      input  logic  ssel,               // active low slave select signal     
      input  logic  asyncTxLoadFirst,   // first word is loaded
-     input  logic  asyncTxLoadNext,    // next words are loaded
+     input  logic  asyncTxLoadFollow,  // following words are loaded
      input  logic  asyncRxRdy,         // transition high-low when rxData is ready 
      
      // part sync with clk
@@ -41,21 +41,21 @@ module spiSync
       end else begin
          syncBusy <= { syncBusy[ SYNC_DEPTH - 1 : 0 ], ~ssel };
       end         
-   assign spiEnd   =  syncBusy[ SYNC_DEPTH ] & ~syncBusy[ SYNC_DEPTH - 1 ]; // falling edge ssel
-   assign spiBusy  =  spiStart | syncBusy[ SYNC_DEPTH - 1 ] | spiEnd;
+   assign spiEnd  = syncBusy[ SYNC_DEPTH ] & ~syncBusy[ SYNC_DEPTH - 1 ]; // falling edge ssel
+   assign spiBusy = spiStart | syncBusy[ SYNC_DEPTH - 1 ] | spiEnd;
    
    logic [ SYNC_DEPTH : 0 ] syncTxLoadFirst;
-   logic [ SYNC_DEPTH : 0 ] syncTxLoadNext;
+   logic [ SYNC_DEPTH : 0 ] syncTxLoadFollow; // following
    always_ff @( posedge reset, posedge clk )
       if ( reset ) begin
-         syncTxLoadFirst <= '0;
-         syncTxLoadNext  <= '0;
+         syncTxLoadFirst  <= '0;
+         syncTxLoadFollow <= '0;
       end else begin
-         syncTxLoadFirst <= { syncTxLoadFirst[ SYNC_DEPTH - 1 : 0 ], asyncTxLoadFirst };
-         syncTxLoadNext  <= { syncTxLoadNext [ SYNC_DEPTH - 1 : 0 ], asyncTxLoadNext  };
+         syncTxLoadFirst  <= { syncTxLoadFirst[ SYNC_DEPTH - 1 : 0 ], asyncTxLoadFirst };
+         syncTxLoadFollow <= { syncTxLoadFollow [ SYNC_DEPTH - 1 : 0 ], asyncTxLoadFollow  };
       end         
    assign spiStart  = ~syncTxLoadFirst[ SYNC_DEPTH ] & syncTxLoadFirst[ SYNC_DEPTH - 1 ]; // rising edge
-   assign spiTxLoad = spiStart | ( ~syncTxLoadNext[ SYNC_DEPTH ] & syncTxLoadNext[ SYNC_DEPTH - 1 ] );
+   assign spiTxLoad = spiStart | ( ~syncTxLoadFollow[ SYNC_DEPTH ] & syncTxLoadFollow[ SYNC_DEPTH - 1 ] );
    
    logic [ SYNC_DEPTH : 0 ] syncRxRdy;
    always_ff @( posedge reset, posedge clk )

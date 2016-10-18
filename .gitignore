@@ -1,7 +1,7 @@
 *
 !*/
 !.gitignore
-!*.tcl
+!*.tcl/
 !README.md
 
 cpp
@@ -17,16 +17,17 @@ matlab
 
 quartus
 !quartus/
-!quartus/**/*.qpf
-!quartus/**/*.qsf
-!quartus/**/*.sdc
-!quartus/**/*.tcl
-!quartus/**/*.qsys
-!quartus/**/*.sopcinfo
-!quartus/**/*.sv
-!quartus/**/*.v
-!quartus/**/*.vh
-!quartus/**/*.vhd
+!quartus/*/*.qpf
+!quartus/*/*.qsf
+!quartus/*/*.sdc
+!quartus/*/*.tcl
+!quartus/*/*.qsys
+!quartus/*/*.sopcinfo
+!quartus/*/*.sv
+!quartus/*/*.v
+!quartus/*/*.vh
+!quartus/*/*.vhd
+!quartus/*/*.stp
 
 rtl
 !rtl/

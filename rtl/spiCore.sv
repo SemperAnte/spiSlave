@@ -10,22 +10,22 @@
 // sync to external spi clock
 //--------------------------------------------------------------------------------
 module spiCore
-  #( parameter logic CPOL,                          // spi clock polarity mode
-               logic CPHA,                          // spi clock phase mode
-               int   DATA_WDT )                     // data width in bits                    
-   ( input  logic                      reset,       // async reset
+  #( parameter logic CPOL,                           // spi clock polarity mode
+               logic CPHA,                           // spi clock phase mode
+               int   DATA_WDT )                      // data width in bits                    
+   ( input  logic                      reset,        // async reset
                
-     input  logic                      ssel,        // active low slave select signal
-     input  logic                      sclk,        // spi clock
-     input  logic                      mosi,        // master out, slave in data line
-     output logic                      miso,        // master in,  slave out data line
+     input  logic                      ssel,         // active low slave select signal
+     input  logic                      sclk,         // spi clock
+     input  logic                      mosi,         // master out, slave in data line
+     output logic                      miso,         // master in,  slave out data line
      
      // txLoad - transition low-high when txData is loaded to internal register
-     output logic                      txLoadFirst, // first word is loaded, for start signal
-     output logic                      txLoadNext,  // next words
-     input  logic [ DATA_WDT - 1 : 0 ] txData,      // transmit data to master
-     output logic                      rxRdy,       // transition high-low when rxData is ready    
-     output logic [ DATA_WDT - 1 : 0 ] rxData );    // receive data from master
+     output logic                      txLoadFirst,  // first word is loaded, for start signal
+     output logic                      txLoadFollow, // following words
+     input  logic [ DATA_WDT - 1 : 0 ] txData,       // transmit data to master
+     output logic                      rxRdy,        // transition high-low when rxData is ready    
+     output logic [ DATA_WDT - 1 : 0 ] rxData );     // receive data from master
 
    // active reset depending on reset and ssel
    logic  actRes;
@@ -38,8 +38,8 @@ module spiCore
    localparam int CNT_WDT = $clog2( DATA_WDT );
    logic [ DATA_WDT - 2 : 0 ] txShift;
    logic [  CNT_WDT - 1 : 0 ] txCnt;
-   logic                      txBitNext;  // skip first clock for CPHA = 1'b1
-   logic                      txWordNext; // txLoadFirst or txLoadNext
+   logic                      txBitFollow;  // skip first clock for CPHA = 1'b1
+   logic                      txWordFollow; // txLoadFirst or txLoadFollow
    
    // slave data output service ( transmit )
    logic  clkMiso;
@@ -47,29 +47,29 @@ module spiCore
    
    always_ff @( posedge actRes, posedge clkMiso )
       if ( actRes ) begin
-         txLoadFirst <= 1'b0;
-         txLoadNext  <= 1'b0;
-         txShift     <= '0;
-         txCnt       <= '0;
-         txBitNext   <= ~CPHA;
-         txWordNext  <= 1'b0;
+         txLoadFirst  <= 1'b0;
+         txLoadFollow <= 1'b0;
+         txShift      <= '0;
+         txCnt        <= '0;
+         txBitFollow  <= ~CPHA;
+         txWordFollow <= 1'b0;
       end else begin        
-         if ( ~txBitNext ) begin // skip first clock for CPHA = 1'b1
-            txBitNext <= 1'b1;
+         if ( ~txBitFollow ) begin // skip first clock for CPHA = 1'b1
+            txBitFollow <= 1'b1;
          end else begin
             txCnt <= txCnt + 1'd1;
             if ( ~|txCnt ) begin // = 0
-               if ( ~txWordNext )
+               if ( ~txWordFollow )
                   txLoadFirst <= 1'b1;
                else
-                  txLoadNext  <= 1'b1;
-               txWordNext <= 1'b1;
-               txShift    <= txData[ DATA_WDT - 2 : 0 ];                           
+                  txLoadFollow <= 1'b1;
+               txWordFollow <= 1'b1;
+               txShift      <= txData[ DATA_WDT - 2 : 0 ];                           
             end else begin
                txShift <= { txShift[ DATA_WDT - 3 : 0 ], 1'b0 };
                if ( txCnt == DATA_WDT / 2 ) begin
-                  txLoadFirst <= 1'b0;      
-                  txLoadNext  <= 1'b0;
+                  txLoadFirst  <= 1'b0;      
+                  txLoadFollow <= 1'b0;
                end
                if ( txCnt == DATA_WDT - 1 ) begin
                   txCnt  <= '0;               
